@@ -6,7 +6,7 @@ A place to work on collaborative code for the **California Climate Action Fund P
 
 # Ecology Streamlit App
 
-This **Streamlit** app processes ecological data for transects and vegetation to calculate coverage statistics. It is built using **Python** and a package called **Streamlit**. The code and app running is hosted via Github Gist, so it does **not** work to download the whole respository, unless 
+This **Streamlit** app processes ecological data for transects and vegetation to calculate coverage statistics. It is built using **Python** and a package called **Streamlit**. The code and app running is hosted via Github Gist, so it does **not** work to download the whole respository as is. 
 
 
 
