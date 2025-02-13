@@ -51,7 +51,7 @@ To run this app, you'll need to install the following dependencies into a Python
 Once the environment is set up and dependencies are installed, you can run the app by executing the following command:
 
 ```bash
-streamlit run https://gist.github.com/DakDune/0a749546c7e6bd287dcdffc256dde835
+streamlit run https://gist.githubusercontent.com/DakDune/0a749546c7e6bd287dcdffc256dde835/raw/9a65be10c1bd65955f38e345439892f390052710/ecology_app.py
 ```
 
 You can then **upload your `.xml` file**  to the app. The app will process the file, generate a graph, and produce an output file.
