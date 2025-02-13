@@ -9,6 +9,7 @@ A place to work on collaborative code for the **California Climate Action Fund P
 This **Streamlit** app processes ecological data for transects and vegetation to calculate coverage statistics. It is built using **Python**.
 
 For Python installation, you can download it from the official website: [Python](https://www.python.org/downloads/)
+In order to manage and work in an environment you also need conda: (https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html)
 
 ---
 
