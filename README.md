@@ -34,7 +34,7 @@ To run this app, you'll need to install the following dependencies into a Python
 
 3. **Install Dependencies**:
 
-   After activating your environment, install all the required dependencies by running:
+   After activating your environment, install all the required dependencies by running (need this file downloaded and in working directory):
    
    ```bash
    pip install -r requirements.txt
