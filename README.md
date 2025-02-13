@@ -12,7 +12,7 @@ This **Streamlit** app processes ecological data for transects and vegetation to
 
 For Python installation, you can download it from the official website: [Python](https://www.python.org/downloads/)
 
-In order to manage and work in an environment you also need conda: (https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html)
+In order to manage and work in an environment you also need conda: (https://docs.anaconda.com/miniconda/install/#quick-command-line-install). Go to quick start and find the type you need for your computer. Then copy and paste into your terminal. 
 
 ---
 
