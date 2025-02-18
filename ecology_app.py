@@ -14,7 +14,7 @@ if uploaded_file:
     positional_df = pd.read_excel(uploaded_file, sheet_name="PositionalCharacteristics")
     transects_df = pd.read_excel(uploaded_file, sheet_name="Transects")
     readme_df = pd.read_excel(uploaded_file, sheet_name="ReadMe")
-
+    calculations_df = pd.DataFrame()
     # Strip leading/trailing spaces to ensure clean matching
     transects_df['type'] = transects_df['type'].str.strip()
     readme_df['name'] = readme_df['name'].str.strip()
