@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+import openpyxl
 
 # Title of the app
 st.title("Ecological Transect Data Processor")
