@@ -3,6 +3,11 @@
 A place to work on collaborative code for the **California Climate Action Fund Project** with the **Coastal Dune Network**. Code written by Maya Bernstein, App made by Dakota Fee
 
 ---
+# USAGE
+
+The code is being hosted on a cloud, meaning simply use this link and it should work. No need to code or download anything. Optionally, if you want to get it running locally following the instructions below (**NOT** Necessary). 
+
+---
 
 # Ecology Streamlit App
 
