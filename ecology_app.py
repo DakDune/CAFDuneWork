@@ -3,8 +3,40 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import openpyxl
 
+# Custom CSS for background image
+st.markdown(
+    """
+    <style>
+    .stApp {
+        background-image: url("https://raw.githubusercontent.com/DakDune/CAFDuneWork/refs/heads/main/dunepicloc.avif");
+        background-size: cover;
+        background-position: top;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+
+
+
 # Title of the app
 st.title("Ecological Transect Data Processor")
+
+# Path to the template file
+template_path = "new_dune_data_blank.xlsx"
+
+# Read the template file as bytes
+with open(template_path, "rb") as file:
+    template_bytes = file.read()
+
+# Create a download button
+st.download_button(
+    label="Download Template File",
+    data=template_bytes,
+    file_name="template.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
 
 # Upload the Excel file
 uploaded_file = st.file_uploader("Upload an Excel file", type=["xlsx"])
