@@ -52,20 +52,25 @@ if st.session_state.get("show_table", False):
     sheet_names = list(sheets_dict.keys())
     selected_sheet = st.selectbox("Select a sheet to edit:", sheet_names)
 
+    # Initialize session state for storing table data
+    if "input_tables" not in st.session_state:
+        st.session_state.input_tables = sheets_dict  # Store all sheets in session state
+
     # Display the selected sheet as an interactive table
     edited_df = st.data_editor(
-        sheets_dict[selected_sheet], 
-        num_rows="dynamic", 
+        st.session_state.input_tables[selected_sheet],  # Use session state for persistence
+        num_rows="dynamic",
         height=400,  # Adjust height (default is 300)
         width=800    # Adjust width (optional)
     )
 
+    # Update session state with edited data
+    st.session_state.input_tables[selected_sheet] = edited_df
+
     # Convert dataframe to .xlsx for download
     output = BytesIO()
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-        for sheet, df in sheets_dict.items():
-            if sheet == selected_sheet:
-                df = edited_df  # Replace the edited sheet with user input
+        for sheet, df in st.session_state.input_tables.items():
             df.to_excel(writer, index=False, sheet_name=sheet)
         writer.close()
     output.seek(0)
