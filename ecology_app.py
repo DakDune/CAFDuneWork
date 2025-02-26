@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import openpyxl
+from io import BytesIO
+
 
 # Custom CSS for background image
 st.markdown(
@@ -23,21 +25,58 @@ st.markdown(
 # Title of the app
 st.title("Ecological Transect Data Processor")
 
-# Path to the template file
+st.write("")  # Adds a small space
+st.markdown("<p style='font-size:18px; color:#FDFD96;'>By Dakota Fee and Maya Bernstein!! Let me know if there is a problem with the site @dakotafee@ucsb.edu</p>", unsafe_allow_html=True)
+
+st.write("")  # Adds a small space
+
+#FOR THE INTERACTIVE DATA INPUT AND TEMPLATE FILE DOWNLOAD
+# Load the template file (ensure this path is correct)
 template_path = "new_dune_data_blank.xlsx"
+sheets_dict = pd.read_excel(template_path, sheet_name=None)  # Load all sheets
 
-# Read the template file as bytes
+# Section: Download Template File
+st.header("Download Template")
 with open(template_path, "rb") as file:
-    template_bytes = file.read()
+    st.download_button("Download Template (xlsx)", file, file_name="template.xlsx")
 
-# Create a download button
-st.download_button(
-    label="Download Template File",
-    data=template_bytes,
-    file_name="template.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-)
+# Section: Interactive Data Entry
+st.subheader("Or Input Data Manually")
 
+if st.button("Enter Data"):
+    st.session_state.show_table = True
+
+if st.session_state.get("show_table", False):
+    # Let the user pick a sheet
+    sheet_names = list(sheets_dict.keys())
+    selected_sheet = st.selectbox("Select a sheet to edit:", sheet_names)
+
+    # Display the selected sheet as an interactive table
+    edited_df = st.data_editor(
+        sheets_dict[selected_sheet], 
+        num_rows="dynamic", 
+        height=400,  # Adjust height (default is 300)
+        width=800    # Adjust width (optional)
+    )
+
+    # Convert dataframe to .xlsx for download
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+        for sheet, df in sheets_dict.items():
+            if sheet == selected_sheet:
+                df = edited_df  # Replace the edited sheet with user input
+            df.to_excel(writer, index=False, sheet_name=sheet)
+        writer.close()
+    output.seek(0)
+
+    st.download_button(
+        "Download Entered Data as .xlsx",
+        output,
+        file_name="entered_data.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+#FOR THE DRAG AND DROP
 # Upload the Excel file
 uploaded_file = st.file_uploader("Upload an Excel file", type=["xlsx"])
 
