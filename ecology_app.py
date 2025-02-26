@@ -5,8 +5,6 @@ import openpyxl
 import copy
 from io import BytesIO
 
-
-
 # Custom CSS for background image
 st.markdown(
     """
@@ -33,9 +31,13 @@ st.markdown("<p style='font-size:18px; color:#FDFD96;'>By Dakota Fee and Maya Be
 st.write("")  # Adds a small space
 
 #FOR THE INTERACTIVE DATA INPUT AND TEMPLATE FILE DOWNLOAD
-# Load the template file (ensure this path is correct)
+# Load the template only once and store it in session state
 template_path = "new_dune_data_blank.xlsx"
-sheets_dict = pd.read_excel(template_path, sheet_name=None)  # Load all sheets
+
+if "sheets_dict" not in st.session_state:
+    st.session_state.sheets_dict = pd.read_excel(template_path, sheet_name=None)
+
+sheets_dict = st.session_state.sheets_dict  # Reference from session state
 
 # Section: Download Template File
 st.header("Download Template")
@@ -47,47 +49,47 @@ st.subheader("Or Input Data Manually")
 
 if st.button("Enter Data"):
     st.session_state.show_table = True
+    st.session_state.data_saved = False  # Reset save status when editing starts
 
 if st.session_state.get("show_table", False):
     # Let the user pick a sheet
     sheet_names = list(sheets_dict.keys())
     selected_sheet = st.selectbox("Select a sheet to edit:", sheet_names)
 
-    # Initialize session state for storing table data (deep copy to prevent unintended resets)
-    if "input_tables" not in st.session_state:
-        st.session_state.input_tables = copy.deepcopy(sheets_dict)
+    # Load the selected sheet data into session state if not already there
+    if f"edited_{selected_sheet}" not in st.session_state:
+        st.session_state[f"edited_{selected_sheet}"] = sheets_dict[selected_sheet].copy()
 
-    # Retrieve current table data
-    current_df = st.session_state.input_tables[selected_sheet]
-
-    # Display interactive table
+    # Display as an interactive table (but changes are not saved yet)
     edited_df = st.data_editor(
-        current_df, 
-        num_rows="dynamic",
-        height=400,  # Adjust height (default is 300)
-        width=800,   # Adjust width (optional)
-        key="data_editor"  # Unique key prevents unnecessary resets
+        st.session_state[f"edited_{selected_sheet}"], 
+        num_rows="dynamic", 
+        height=400,  
+        width=800    
     )
 
-    # Button to apply changes (prevents live updates from triggering reruns)
+    # Show "Save Changes" button
     if st.button("Save Changes"):
-        st.session_state.input_tables[selected_sheet] = edited_df
-        st.success("Changes saved!")
+        st.session_state[f"edited_{selected_sheet}"] = edited_df  # Store user edits
+        st.session_state.data_saved = True  # Mark that changes are saved
 
-    # Convert dataframe to .xlsx for download
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-        for sheet, df in st.session_state.input_tables.items():
-            df.to_excel(writer, index=False, sheet_name=sheet)
-        writer.close()
-    output.seek(0)
+    # Show download button only after changes are saved
+    if st.session_state.get("data_saved", False):
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+            for sheet, df in sheets_dict.items():
+                if sheet == selected_sheet:
+                    df = st.session_state[f"edited_{selected_sheet}"]  # Get latest version
+                df.to_excel(writer, index=False, sheet_name=sheet)
+            writer.close()
+        output.seek(0)
 
-    st.download_button(
-        "Download Entered Data as .xlsx",
-        output,
-        file_name="entered_data.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+        st.download_button(
+            "Download Entered Data as .xlsx",
+            output,
+            file_name="entered_data.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
 #FOR THE DRAG AND DROP
 # Upload the Excel file
