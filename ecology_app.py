@@ -3,7 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import openpyxl
 from io import BytesIO
-import xlsxwriter
+
 
 
 # Custom CSS for background image
