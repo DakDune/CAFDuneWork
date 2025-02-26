@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import openpyxl
+import copy
 from io import BytesIO
 
 
@@ -52,20 +53,26 @@ if st.session_state.get("show_table", False):
     sheet_names = list(sheets_dict.keys())
     selected_sheet = st.selectbox("Select a sheet to edit:", sheet_names)
 
-    # Initialize session state for storing table data
+    # Initialize session state for storing table data (deep copy to prevent unintended resets)
     if "input_tables" not in st.session_state:
-        st.session_state.input_tables = sheets_dict  # Store all sheets in session state
+        st.session_state.input_tables = copy.deepcopy(sheets_dict)
 
-    # Display the selected sheet as an interactive table
+    # Retrieve current table data
+    current_df = st.session_state.input_tables[selected_sheet]
+
+    # Display interactive table
     edited_df = st.data_editor(
-        st.session_state.input_tables[selected_sheet],  # Use session state for persistence
+        current_df, 
         num_rows="dynamic",
         height=400,  # Adjust height (default is 300)
-        width=800    # Adjust width (optional)
+        width=800,   # Adjust width (optional)
+        key="data_editor"  # Unique key prevents unnecessary resets
     )
 
-    # Update session state with edited data
-    st.session_state.input_tables[selected_sheet] = edited_df
+    # Button to apply changes (prevents live updates from triggering reruns)
+    if st.button("Save Changes"):
+        st.session_state.input_tables[selected_sheet] = edited_df
+        st.success("Changes saved!")
 
     # Convert dataframe to .xlsx for download
     output = BytesIO()
