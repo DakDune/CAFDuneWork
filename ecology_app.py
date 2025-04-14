@@ -53,10 +53,10 @@ uploaded_file = st.file_uploader("Upload an Excel file", type=["xlsx"])
 
 if uploaded_file:
     # Load the data from sheets
-    positional_df = pd.read_excel(file_path, sheet_name="PositionalCharacteristics")
-    transects_df = pd.read_excel(file_path, sheet_name="Transects")
-    elevation_df = pd.read_excel(file_path, sheet_name="Elevation")
-    readme_df = pd.read_excel(file_path, sheet_name="ReadMe")
+    positional_df = pd.read_excel(uploaded_file, sheet_name="PositionalCharacteristics")
+    transects_df = pd.read_excel(uploaded_file, sheet_name="Transects")
+    elevation_df = pd.read_excel(uploaded_file, sheet_name="Elevation")
+    readme_df = pd.read_excel(uploaded_file, sheet_name="ReadMe")
     calculations_df = pd.DataFrame()
     # Strip leading/trailing spaces to ensure clean matching
     transects_df['type'] = transects_df['type'].str.strip()
