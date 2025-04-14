@@ -26,7 +26,7 @@ st.markdown(
 st.title("Ecological Transect Data Processor")
 
 st.write("")  # Adds a small space
-st.markdown("<p style='font-size:18px; color:#FDFD96;'>By Dakota Fee and Maya Bernstein (Awesome people)!! Let me know if there is a problem with the site (@dakotafee@ucsb.edu) and I will forward to Maya</p>", unsafe_allow_html=True)
+st.markdown("<p style='font-size:18px; color:#FDFD96;'>By Dakota Fee and Maya Bernstein (Awesome people)!! Let me know if there is a problem with the site (@dakotafee@ucsb.edu)</p>", unsafe_allow_html=True)
 
 st.write("")  # Adds a small space
 
