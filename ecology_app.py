@@ -364,32 +364,39 @@ if uploaded_file:
     avg_df["Species"] = avg_df["Species"].str.replace("pctcov_", "").str.replace(zone_suffix, "")
     avg_df["Species"] = avg_df["Species"].str.replace(r"([a-z])([A-Z])", r"\1 \2", regex=True)
     
-    # Plot
-    fig, ax = plt.subplots(figsize=(8, 5))
-    avg_df.plot(kind="bar", x="Species", y="Percent Cover", ax=ax, legend=False, color=pastel_palette[:len(avg_df)])
-    ax.set_title(f"Average Percent Cover by Species ({zone_option.capitalize()} Transects)")
-    ax.set_ylabel("Percent Cover")
-    ax.set_xlabel("Species")
-    plt.xticks(rotation=45, ha='right')
-    plt.tight_layout()
+    fig, ax = plt.subplots(figsize=(8, 0.4 * len(avg_df)))  # Dynamic height
+    avg_df.sort_values("Percent Cover").plot(
+        kind="barh",
+        x="Species",
+        y="Percent Cover",
+        ax=ax,
+        legend=False,
+        color=pastel_palette[:len(avg_df)]
+    )
     
+    ax.set_title(f"Average Percent Cover by Species ({zone_option.capitalize()} Transects)")
+    ax.set_xlabel("Percent Cover")
+    ax.set_ylabel("Species")
+    plt.tight_layout()
     st.pyplot(fig)
 
-    # Create a stacked bar dataframe
-    stack_df = calculations_df[["transect"] + pctcov_cols].copy()
-    stack_df.columns = ["transect"] + [col.replace("pctcov_", "").replace(zone_suffix, "") for col in pctcov_cols]
+    if len(pctcov_cols) > 0:
+        stack_df = calculations_df[["transect"] + pctcov_cols].copy()
+        stack_df.columns = ["transect"] + [col.replace("pctcov_", "").replace(zone_suffix, "") for col in pctcov_cols]
     
-    # Set transect as index for plotting
-    stack_df.set_index("transect", inplace=True)
-    fig2, ax2 = plt.subplots(figsize=(10, 6))
-    stack_df.plot(kind="bar", stacked=True, ax=ax2, colormap=pastel_palette[:stack_df.shape[1]])
-    ax2.set_title(f"Species Composition by Transect ({zone_option.capitalize()} Transects)")
-    ax2.set_ylabel("Percent Cover")
-    ax2.set_xlabel("Transect")
-    plt.xticks(rotation=45, ha='right')
-    plt.tight_layout()
-    
-    st.pyplot(fig2)
+        # Plot
+        stack_df.set_index("transect", inplace=True)
+        fig2, ax2 = plt.subplots(figsize=(10, 6))
+        stack_df.plot(kind="bar", stacked=True, ax=ax2, color=pastel_palette[:stack_df.shape[1]])
+        ax2.set_title(f"Species Composition by Transect ({zone_option.capitalize()} Transects)")
+        ax2.set_ylabel("Percent Cover")
+        ax2.set_xlabel("Transect")
+        plt.xticks(rotation=45, ha='right')
+        plt.tight_layout()
+        st.pyplot(fig2)
+    else:
+        st.info(f"No species percent cover data available for the '{zone_option}' zone.")
+
 
 
 
