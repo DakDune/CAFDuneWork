@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import openpyxl
 import copy
 from io import BytesIO
+from matplotlib import cm
+import numpy as np
 
 # Custom CSS for background image
 st.markdown(
@@ -342,61 +344,46 @@ if uploaded_file:
         horizontal=True
     )
 
-    pastel_palette = ["#cdb4db",  # light purple
-                      "#b5ead7",  # light green
-                      "#a0c4ff",  # ocean blue
-                      "#ffe066",  # golden yellow
-                      "#fbc4ab",  # optional coral-pink for variety
-                      "#fdffb6",  # pale yellow
-                      "#9bf6ff",  # light cyan
-                      "#d0f4de"]  # mint
-
-
-    # Filter columns based on zone
-    zone_suffix = f"_{zone_option}"
-    pctcov_cols = [col for col in calculations_df.columns if col.startswith("pctcov_") and col.endswith(zone_suffix)]
+        # Define pastel colormap function
+    def get_pastel_colors(n):
+        base_cmap = cm.get_cmap('Pastel1' if n <= 9 else 'Pastel2')  # Pastel1: 9 colors, Pastel2: 8
+        if n > base_cmap.N:
+            # If we need more than what base cmap provides, interpolate
+            return [base_cmap(i / n) for i in range(n)]
+        else:
+            return [base_cmap(i) for i in range(n)]
+    # Prepare the dataframe for plotting
+    # Filter for columns containing percent cover for the selected zone (e.g., whole, dune, veg)
+    zone_suffix = f"_{zone_option}"  # zone_option is one of 'whole', 'dune', or 'veg'
+    stack_df = calculations_df[["transect"] + [col for col in calculations_df.columns if col.endswith(zone_suffix)]].copy()
     
-    # Build a dataframe of average percent cover
-    avg_df = calculations_df[pctcov_cols].mean().reset_index()
-    avg_df.columns = ["Species", "Percent Cover"]
+    # Rename columns for plotting (strip the 'pctcov_' prefix and zone suffix)
+    stack_df.columns = ["transect"] + [col.replace("pctcov_", "").replace(zone_suffix, "") for col in stack_df.columns[1:]]
     
-    # Clean up species names
-    avg_df["Species"] = avg_df["Species"].str.replace("pctcov_", "").str.replace(zone_suffix, "")
-    avg_df["Species"] = avg_df["Species"].str.replace(r"([a-z])([A-Z])", r"\1 \2", regex=True)
+    # Remove species columns with all zero percent cover
+    nonzero_cols = [col for col in stack_df.columns[1:] if stack_df[col].sum() > 0]
+    stack_df = stack_df[["transect"] + nonzero_cols]
     
-    fig, ax = plt.subplots(figsize=(8, 0.4 * len(avg_df)))  # Dynamic height
-    avg_df.sort_values("Percent Cover").plot(
-        kind="barh",
-        x="Species",
-        y="Percent Cover",
-        ax=ax,
-        legend=False,
-        color=pastel_palette[:len(avg_df)]
-    )
+    # Set index for plotting
+    stack_df.set_index("transect", inplace=True)
     
-    ax.set_title(f"Average Percent Cover by Species ({zone_option.capitalize()} Transects)")
+    # Create the plot
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    # Get pastel colors dynamically
+    colors = get_pastel_colors(len(stack_df.columns))
+    
+    # Plot the horizontal stacked bar chart
+    stack_df.plot(kind="barh", stacked=True, ax=ax, color=colors)
+    
+    # Titles and labels
+    ax.set_title(f"Species Composition by Transect ({zone_option.capitalize()} Transects)")
     ax.set_xlabel("Percent Cover")
-    ax.set_ylabel("Species")
+    ax.set_ylabel("Transect")
+    
+    # Tight layout for clean display
     plt.tight_layout()
     st.pyplot(fig)
-
-    if len(pctcov_cols) > 0:
-        stack_df = calculations_df[["transect"] + pctcov_cols].copy()
-        stack_df.columns = ["transect"] + [col.replace("pctcov_", "").replace(zone_suffix, "") for col in pctcov_cols]
-    
-        # Plot
-        stack_df.set_index("transect", inplace=True)
-        fig2, ax2 = plt.subplots(figsize=(10, 6))
-        stack_df.plot(kind="bar", stacked=True, ax=ax2, color=pastel_palette[:stack_df.shape[1]])
-        ax2.set_title(f"Species Composition by Transect ({zone_option.capitalize()} Transects)")
-        ax2.set_ylabel("Percent Cover")
-        ax2.set_xlabel("Transect")
-        plt.xticks(rotation=45, ha='right')
-        plt.tight_layout()
-        st.pyplot(fig2)
-    else:
-        st.info(f"No species percent cover data available for the '{zone_option}' zone.")
-
 
 
 
