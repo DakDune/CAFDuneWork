@@ -26,13 +26,13 @@ st.markdown(
 st.title("Ecological Transect Data Processor")
 
 st.write("")  # Adds a small space
-st.markdown("<p style='font-size:18px; color:#FDFD96;'>By Dakota Fee and Maya Bernstein!! Let me know if there is a problem with the site @dakotafee@ucsb.edu</p>", unsafe_allow_html=True)
+st.markdown("<p style='font-size:18px; color:#FDFD96;'>By Dakota Fee and Maya Bernstein (Awesome people)!! Let me know if there is a problem with the site (@dakotafee@ucsb.edu) and I will forward to Maya</p>", unsafe_allow_html=True)
 
 st.write("")  # Adds a small space
 
 #FOR THE INTERACTIVE DATA INPUT AND TEMPLATE FILE DOWNLOAD
 # Load the template only once and store it in session state
-template_path = "new_dune_data_blank.xlsx"
+template_path = "dune_data_blank.xlsx"
 
 if "sheets_dict" not in st.session_state:
     st.session_state.sheets_dict = pd.read_excel(template_path, sheet_name=None)
@@ -45,51 +45,7 @@ with open(template_path, "rb") as file:
     st.download_button("Download Template (xlsx)", file, file_name="template.xlsx")
 
 # Section: Interactive Data Entry
-st.subheader("Or Input Data Manually")
-
-if st.button("Enter Data"):
-    st.session_state.show_table = True
-    st.session_state.data_saved = False  # Reset save status when editing starts
-
-if st.session_state.get("show_table", False):
-    # Let the user pick a sheet
-    sheet_names = list(sheets_dict.keys())
-    selected_sheet = st.selectbox("Select a sheet to edit:", sheet_names)
-
-    # Load the selected sheet data into session state if not already there
-    if f"edited_{selected_sheet}" not in st.session_state:
-        st.session_state[f"edited_{selected_sheet}"] = sheets_dict[selected_sheet].copy()
-
-    # Display as an interactive table (but changes are not saved yet)
-    edited_df = st.data_editor(
-        st.session_state[f"edited_{selected_sheet}"], 
-        num_rows="dynamic", 
-        height=400,  
-        width=800    
-    )
-
-    # Show "Save Changes" button
-    if st.button("Save Changes"):
-        st.session_state[f"edited_{selected_sheet}"] = edited_df  # Store user edits
-        st.session_state.data_saved = True  # Mark that changes are saved
-
-    # Show download button only after changes are saved
-    if st.session_state.get("data_saved", False):
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-            for sheet, df in sheets_dict.items():
-                if sheet == selected_sheet:
-                    df = st.session_state[f"edited_{selected_sheet}"]  # Get latest version
-                df.to_excel(writer, index=False, sheet_name=sheet)
-            writer.close()
-        output.seek(0)
-
-        st.download_button(
-            "Download Entered Data as .xlsx",
-            output,
-            file_name="entered_data.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+st.subheader("Or Input Data")
 
 #FOR THE DRAG AND DROP
 # Upload the Excel file
@@ -97,13 +53,18 @@ uploaded_file = st.file_uploader("Upload an Excel file", type=["xlsx"])
 
 if uploaded_file:
     # Load the data from sheets
-    positional_df = pd.read_excel(uploaded_file, sheet_name="PositionalCharacteristics")
-    transects_df = pd.read_excel(uploaded_file, sheet_name="Transects")
-    readme_df = pd.read_excel(uploaded_file, sheet_name="ReadMe")
+    positional_df = pd.read_excel(file_path, sheet_name="PositionalCharacteristics")
+    transects_df = pd.read_excel(file_path, sheet_name="Transects")
+    elevation_df = pd.read_excel(file_path, sheet_name="Elevation")
+    readme_df = pd.read_excel(file_path, sheet_name="ReadMe")
     calculations_df = pd.DataFrame()
     # Strip leading/trailing spaces to ensure clean matching
     transects_df['type'] = transects_df['type'].str.strip()
     readme_df['name'] = readme_df['name'].str.strip()
+    
+    #amend the transects column to have more specific data so there are no duplicate values
+    transects_df["transect"] = transects_df["sitename"] + "_" + transects_df["date"].astype(str) + "_" + transects_df["transect"]
+    positional_df["transect"] = positional_df["sitename"] + "_" + positional_df["date"].astype(str) + "_" + positional_df["transect"]
     
     # Create a mapping from 'name' to 'native' from readme_df
     name_to_native = readme_df.set_index('name')['native']
@@ -111,8 +72,13 @@ if uploaded_file:
     # Add 'native' column to transects_df based on 'type' matching 'name'
     transects_df['native'] = transects_df['type'].map(name_to_native)
     
-    # Add a new column indicating if 'type' is vegetation (4 or 5 characters long)
-    transects_df['vegetation'] = transects_df['type'].str.len().isin([4, 5])
+    # Create a mapping from 'name' to 'codetype' in readme_df
+    type_to_codetype = readme_df.set_index('name')['codetype']
+    # Map the 'codetype' values to transects_df based on 'type'
+    transects_df['codetype'] = transects_df['type'].map(type_to_codetype)
+    # Fill missing 'codetype' values with "Dead Terrestrial Plant" if 'type' contains "-D"
+    transects_df.loc[transects_df['type'].str.contains('-D', na=False), 'codetype'] = "Dead Terrestrial Plant"
+    
     
     # Create a mapping for positional information (toe_sea, toe_in, lowest_veg)
     positional_mapping = positional_df.set_index('transect')[['toe_sea', 'toe_in', 'lowest_veg']]
@@ -120,386 +86,312 @@ if uploaded_file:
     # Map the positional values to transects_df
     transects_df = transects_df.join(positional_mapping, on='transect')
     
-    # Identify if the start and end positions are within the dune
-    transects_df['start_within_dune'] = (transects_df['start'] <= transects_df['toe_sea']) & (transects_df['start'] >= transects_df['toe_in'])
-    transects_df['end_within_dune'] = (transects_df['end'] >= transects_df['toe_in']) & (transects_df['end'] <= transects_df['toe_sea'])
+    # Calculate if the row starts or ends within the dune
+    start_within_dune = (transects_df['start'] <= transects_df['toe_sea']) & (transects_df['start'] >= transects_df['toe_in'])
+    end_within_dune = (transects_df['end'] >= transects_df['toe_in']) & (transects_df['end'] <= transects_df['toe_sea'])
     
-    # Create the final 'dune' column by checking if either start or end is within the dune
-    transects_df['dune'] = transects_df['start_within_dune'] | transects_df['end_within_dune']
+    # Create the final 'dune' column directly
+    transects_df['dune'] = start_within_dune | end_within_dune
+    
     
     # Identify if the row is within the vegetated portion of the dune
     transects_df['veg'] = transects_df['start'] <= transects_df['lowest_veg']
-
+    
+    #transects_df.drop(columns=["sitename", "date"], inplace=True)
+    
     #transect letter
     calculations_df["transect"] = positional_df["transect"]
-    
+    #transect name and site name
+    calculations_df["sitename"] = positional_df ["sitename"]
+    calculations_df["date"] = positional_df["date"]
     # transect length
-    calculations_df["tran_length"] = positional_df["HTS"]  
-    
-    # dune length
-    dune_length = positional_df["toe_sea"] - positional_df["toe_in"]
-    calculations_df["dune_length"] = dune_length
-    
-    #vegeted length
-    calculations_df["veg_length"] = positional_df["lowest_veg"]  
-    
-    #percent cover of everything over entire transect length
-    pct_cover_all_whole = transects_df.groupby("transect")["cor_length"].sum() / calculations_df.set_index("transect")["tran_length"]
-    calculations_df["pct_cover_all_whole"] = calculations_df["transect"].map(pct_cover_all_whole)
-    
-    #----- veg over whole transect
-    
-    # Filter the rows where 'type' contains a four or five letter code
-    vegetation_df = transects_df[transects_df['type'].str.len().isin([4, 5])]
-    
-    # Sum the 'cor_length' for those rows
-    veg_cover_sum = vegetation_df.groupby("transect")["cor_length"].sum()
-    
-    # Calculate the percent cover of vegetation over the entire transect
-    pct_cover_veg_whole = veg_cover_sum / calculations_df.set_index("transect")["tran_length"]
-    
-    # Add this calculation to the 'calculations_df'
-    calculations_df["pct_cover_veg_whole"] = calculations_df["transect"].map(pct_cover_veg_whole)
-    
-    #----- native veg whole transect
-    
-    # Filter the rows where 'type' contains a four or five letter code and 'native' is 1.0
-    native_vegetation_df = transects_df[(transects_df['type'].str.len().isin([4, 5])) & (transects_df['native'] == 1.0)]
-    
-    # Sum the 'cor_length' for those rows
-    native_veg_cover_sum = native_vegetation_df.groupby("transect")["cor_length"].sum()
-    
-    # Calculate the percent cover of native vegetation over the entire transect
-    pct_cover_native_veg_whole = native_veg_cover_sum / calculations_df.set_index("transect")["tran_length"]
-    
-    # Add this calculation to the 'calculations_df'
-    calculations_df["pct_cover_native_veg_whole"] = calculations_df["transect"].map(pct_cover_native_veg_whole)
-    
-    #----- nonnative veg whole transect
-    
-    # Filter the rows where 'type' contains a four or five letter code and 'native' is 0.0
-    non_native_vegetation_df = transects_df[(transects_df['type'].str.len().isin([4, 5])) & (transects_df['native'] == 0.0)]
-    
-    # Sum the 'cor_length' for those rows
-    non_native_veg_cover_sum = non_native_vegetation_df.groupby("transect")["cor_length"].sum()
-    
-    # Calculate the percent cover of non-native vegetation over the entire transect
-    pct_cover_non_native_veg_whole = non_native_veg_cover_sum / calculations_df.set_index("transect")["tran_length"]
-    
-    # Add this calculation to the 'calculations_df'
-    calculations_df["pct_cover_non_native_veg_whole"] = calculations_df["transect"].map(pct_cover_non_native_veg_whole)
-    
-    #------- all cover along dune
-    
-    # Filter for rows where 'dune' is True
-    dune_df = transects_df[transects_df["dune"] == True]
-    
-    # Sum the 'cor_length' for each transect
-    dune_cover_sum = dune_df.groupby("transect")["cor_length"].sum()
-    
-    # Calculate the percent cover by dividing by 'dune_length' from calculations_df
-    pct_cover_dune = dune_cover_sum / calculations_df.set_index("transect")["dune_length"]
-    
-    # Add this calculation to calculations_df
-    calculations_df["pct_cover_dune"] = calculations_df["transect"].map(pct_cover_dune)
-    
-    #----- veg cover dune
-    
-    # Filter for rows where both 'vegetation' and 'dune' are True
-    dune_vegetation_df = transects_df[(transects_df["vegetation"] == True) & (transects_df["dune"] == True)]
-    
-    # Sum the 'cor_length' for each transect for only vegetation in the dune portion
-    veg_cover_dune_sum = dune_vegetation_df.groupby("transect")["cor_length"].sum()
-    
-    # Calculate the percent cover by dividing by 'dune_length' from calculations_df
-    pct_cover_veg_dune = veg_cover_dune_sum / calculations_df.set_index("transect")["dune_length"]
-    
-    # Add this calculation to calculations_df
-    calculations_df["pct_cover_veg_dune"] = calculations_df["transect"].map(pct_cover_veg_dune)
-    
-    # ------ native cover dune
-    # Filter for rows where 'vegetation' is True, 'dune' is True, and 'native' is 1.0
-    native_dune_veg_df = transects_df[(transects_df["vegetation"] == True) & 
-                                      (transects_df["dune"] == True) & 
-                                      (transects_df["native"] == 1.0)]
-    
-    # Sum the 'cor_length' for each transect for only native vegetation in the dune portion
-    native_veg_cover_dune_sum = native_dune_veg_df.groupby("transect")["cor_length"].sum()
-    
-    # Calculate the percent cover by dividing by 'dune_length' from calculations_df
-    pct_cover_native_veg_dune = native_veg_cover_dune_sum / calculations_df.set_index("transect")["dune_length"]
-    
-    # Add this calculation to calculations_df
-    calculations_df["pct_cover_native_veg_dune"] = calculations_df["transect"].map(pct_cover_native_veg_dune)
-    
-    # ------ nonnative cover dune
-    # Filter for rows where 'vegetation' is True, 'dune' is True, and 'native' is 0.0 (nonnative)
-    nonnative_dune_veg_df = transects_df[(transects_df["vegetation"] == True) & 
-                                      (transects_df["dune"] == True) & 
-                                      (transects_df["native"] == 0.0)]
-    
-    # Sum the 'cor_length' for each transect for only native vegetation in the dune portion
-    nonnative_veg_cover_dune_sum = nonnative_dune_veg_df.groupby("transect")["cor_length"].sum()
-    
-    # Calculate the percent cover by dividing by 'dune_length' from calculations_df
-    pct_cover_nonnative_veg_dune = nonnative_veg_cover_dune_sum / calculations_df.set_index("transect")["dune_length"]
-    
-    # Add this calculation to calculations_df
-    calculations_df["pct_cover_nonnative_veg_dune"] = calculations_df["transect"].map(pct_cover_nonnative_veg_dune)
-    
-    #---------vegetated-----------
-    
-    #------- all cover along veg
-    
-    # Filter for rows where 'veg' is True
-    veg_df = transects_df[transects_df["veg"] == True]
-    
-    # Sum the 'cor_length' for each transect
-    veg_cover_sum = veg_df.groupby("transect")["cor_length"].sum()
-    
-    # Calculate the percent cover by dividing by 'veg_length' from calculations_df
-    pct_cover_veg = veg_cover_sum / calculations_df.set_index("transect")["veg_length"]
-    
-    # Add this calculation to calculations_df
-    calculations_df["pct_cover_veg"] = calculations_df["transect"].map(pct_cover_veg)
-    
-    #----- veg cover veg
-    
-    # Filter for rows where both 'vegetation' and 'veg' are True
-    veg_vegetation_df = transects_df[(transects_df["vegetation"] == True) & (transects_df["veg"] == True)]
-    
-    # Sum the 'cor_length' for each transect for only vegetation in the veg portion
-    veg_cover_veg_sum = veg_vegetation_df.groupby("transect")["cor_length"].sum()
-    
-    # Calculate the percent cover by dividing by 'veg_length' from calculations_df
-    pct_cover_veg_veg = veg_cover_veg_sum / calculations_df.set_index("transect")["veg_length"]
-    
-    # Add this calculation to calculations_df
-    calculations_df["pct_cover_veg_veg"] = calculations_df["transect"].map(pct_cover_veg_veg)
-    
-    # ------ native cover veg
-    # Filter for rows where 'vegetation' is True, 'veg' is True, and 'native' is 1.0
-    native_veg_veg_df = transects_df[(transects_df["vegetation"] == True) & 
-                                      (transects_df["veg"] == True) & 
-                                      (transects_df["native"] == 1.0)]
-    
-    # Sum the 'cor_length' for each transect for only native vegetation in the veg portion
-    native_veg_cover_veg_sum = native_veg_veg_df.groupby("transect")["cor_length"].sum()
-    
-    # Calculate the percent cover by dividing by 'veg_length' from calculations_df
-    pct_cover_native_veg_veg = native_veg_cover_veg_sum / calculations_df.set_index("transect")["veg_length"]
-    
-    # Add this calculation to calculations_df
-    calculations_df["pct_cover_native_veg_veg"] = calculations_df["transect"].map(pct_cover_native_veg_veg)
-    
-    # ------ nonnative cover veg
-    # Filter for rows where 'vegetation' is True, 'veg' is True, and 'native' is 0.0 (nonnative)
-    nonnative_veg_veg_df = transects_df[(transects_df["vegetation"] == True) & 
-                                      (transects_df["veg"] == True) & 
-                                      (transects_df["native"] == 0.0)]
-    
-    # Sum the 'cor_length' for each transect for only native vegetation in the veg portion
-    nonnative_veg_cover_veg_sum = nonnative_veg_veg_df.groupby("transect")["cor_length"].sum()
-    
-    # Calculate the percent cover by dividing by 'veg_length' from calculations_df
-    pct_cover_nonnative_veg_veg = nonnative_veg_cover_veg_sum / calculations_df.set_index("transect")["veg_length"]
-    
-    # Add this calculation to calculations_df
-    calculations_df["pct_cover_nonnative_veg_veg"] = calculations_df["transect"].map(pct_cover_nonnative_veg_veg)
-    
-    #------------species specific-----------------
-    
-    
-    #species over whole transect
-    
-    #abma whole 
-    
-    # Filter the transects_df for rows where the 'type' is 'ABMA'
-    abma_vegetation_df = transects_df[transects_df['type'] == 'ABMA']
-    
-    # Sum the 'cor_length' for those rows
-    abma_cover_sum = abma_vegetation_df.groupby("transect")["cor_length"].sum()
-    
-    # Calculate the percent cover of ABMA over the entire transect
-    pct_cover_abma_whole = abma_cover_sum / calculations_df.set_index("transect")["tran_length"]
-    
-    # Add this calculation to the 'calculations_df'
-    calculations_df["pct_cover_abma_whole"] = calculations_df["transect"].map(pct_cover_abma_whole)
-    
-    # amch whole 
-    
-    # Filter the transects_df for rows where the 'type' is 'ABMA'
-    amch_vegetation_df = transects_df[transects_df['type'] == 'AMCH']
-    
-    # Sum the 'cor_length' for those rows
-    amch_cover_sum = amch_vegetation_df.groupby("transect")["cor_length"].sum()
-    
-    # Calculate the percent cover of AMCH over the entire transect
-    pct_cover_amch_whole = amch_cover_sum / calculations_df.set_index("transect")["tran_length"]
-    
-    # Add this calculation to the 'calculations_df'
-    calculations_df["pct_cover_amch_whole"] = calculations_df["transect"].map(pct_cover_amch_whole)
-    
-    # cach whole
-    
-    # Filter the transects_df for rows where the 'type' is 'CACH'
-    cach_vegetation_df = transects_df[transects_df['type'] == 'CACH']
-    
-    # Sum the 'cor_length' for those rows
-    cach_cover_sum = cach_vegetation_df.groupby("transect")["cor_length"].sum()
-    
-    # Calculate the percent cover of CACH over the entire transect
-    pct_cover_cach_whole = cach_cover_sum / calculations_df.set_index("transect")["tran_length"]
-    
-    # Add this calculation to the 'calculations_df'
-    calculations_df["pct_cover_cach_whole"] = calculations_df["transect"].map(pct_cover_cach_whole)
-    
-    #atle whole
-    
-    # Filter the transects_df for rows where the 'type' is 'ATLE'
-    atle_vegetation_df = transects_df[transects_df['type'] == 'ATLE']
-    
-    # Sum the 'cor_length' for those rows
-    atle_cover_sum = atle_vegetation_df.groupby("transect")["cor_length"].sum()
-    
-    # Calculate the percent cover of ATLE over the entire transect
-    pct_cover_atle_whole = atle_cover_sum / calculations_df.set_index("transect")["tran_length"]
-    
-    # Add this calculation to the 'calculations_df'
-    calculations_df["pct_cover_atle_whole"] = calculations_df["transect"].map(pct_cover_atle_whole)
-    
-    # species over dune
-    
-    #abma dune 
-    
-    # Filter the transects_df for rows where the 'type' is 'ABMA' and the 'dune' column is True
-    abma_vegetation_dune_df = transects_df[(transects_df['type'] == 'ABMA') & (transects_df['dune'] == True)]
-    
-    # Sum the 'cor_length' for those rows
-    abma_cover_sum_dune = abma_vegetation_dune_df.groupby("transect")["cor_length"].sum()
-    
-    # Calculate the percent cover of ABMA over the dune portion of the transect
-    pct_cover_abma_dune = abma_cover_sum_dune / calculations_df.set_index("transect")["dune_length"]
-    
-    # Add this calculation to the 'calculations_df'
-    calculations_df["pct_cover_abma_dune"] = calculations_df["transect"].map(pct_cover_abma_dune)
-    
-    #amch dune 
-    
-    # Filter the transects_df for rows where the 'type' is 'AMCH' and the 'dune' column is True
-    amch_vegetation_dune_df = transects_df[(transects_df['type'] == 'AMCH') & (transects_df['dune'] == True)]
-    
-    # Sum the 'cor_length' for those rows
-    amch_cover_sum_dune = amch_vegetation_dune_df.groupby("transect")["cor_length"].sum()
-    
-    # Calculate the percent cover of AMCH over the dune portion of the transect
-    pct_cover_amch_dune = amch_cover_sum_dune / calculations_df.set_index("transect")["dune_length"]
-    
-    # Add this calculation to the 'calculations_df'
-    calculations_df["pct_cover_amch_dune"] = calculations_df["transect"].map(pct_cover_amch_dune)
-    
-    #cach dune 
-    
-    # Filter the transects_df for rows where the 'type' is 'CACH' and the 'dune' column is True
-    cach_vegetation_dune_df = transects_df[(transects_df['type'] == 'CACH') & (transects_df['dune'] == True)]
-    
-    # Sum the 'cor_length' for those rows
-    cach_cover_sum_dune = cach_vegetation_dune_df.groupby("transect")["cor_length"].sum()
-    
-    # Calculate the percent cover of CACH over the dune portion of the transect
-    pct_cover_cach_dune = cach_cover_sum_dune / calculations_df.set_index("transect")["dune_length"]
-    
-    # Add this calculation to the 'calculations_df'
-    calculations_df["pct_cover_cach_dune"] = calculations_df["transect"].map(pct_cover_cach_dune)
-    
-    #atle dune 
-    
-    # Filter the transects_df for rows where the 'type' is 'ATLE' and the 'dune' column is True
-    atle_vegetation_dune_df = transects_df[(transects_df['type'] == 'ATLE') & (transects_df['dune'] == True)]
-    
-    # Sum the 'cor_length' for those rows
-    atle_cover_sum_dune = atle_vegetation_dune_df.groupby("transect")["cor_length"].sum()
-    
-    # Calculate the percent cover of ATLE over the dune portion of the transect
-    pct_cover_atle_dune = atle_cover_sum_dune / calculations_df.set_index("transect")["dune_length"]
-    
-    # Add this calculation to the 'calculations_df'
-    calculations_df["pct_cover_atle_dune"] = calculations_df["transect"].map(pct_cover_atle_dune)
-    
-    #species over veg poriton 
-    
-    #abma veg 
-    
-    # Filter the transects_df for rows where the 'type' is 'ABMA' and the 'veg' column is True
-    abma_vegetation_veg_df = transects_df[(transects_df['type'] == 'ABMA') & (transects_df['veg'] == True)]
-    
-    # Sum the 'cor_length' for those rows
-    abma_cover_sum_veg = abma_vegetation_veg_df.groupby("transect")["cor_length"].sum()
-    
-    # Calculate the percent cover of ABMA over the veg portion of the transect
-    pct_cover_abma_veg = abma_cover_sum_veg / calculations_df.set_index("transect")["veg_length"]
-    
-    # Add this calculation to the 'calculations_df'
-    calculations_df["pct_cover_abma_veg"] = calculations_df["transect"].map(pct_cover_abma_veg)
-    
-    #amch veg 
-    
-    # Filter the transects_df for rows where the 'type' is 'AMCH' and the 'veg' column is True
-    amch_vegetation_veg_df = transects_df[(transects_df['type'] == 'AMCH') & (transects_df['veg'] == True)]
-    
-    # Sum the 'cor_length' for those rows
-    amch_cover_sum_veg = amch_vegetation_veg_df.groupby("transect")["cor_length"].sum()
-    
-    # Calculate the percent cover of AMCH over the veg portion of the transect
-    pct_cover_amch_veg = amch_cover_sum_veg / calculations_df.set_index("transect")["veg_length"]
-    
-    # Add this calculation to the 'calculations_df'
-    calculations_df["pct_cover_amch_veg"] = calculations_df["transect"].map(pct_cover_amch_veg)
-    
-    #cach veg 
-    
-    # Filter the transects_df for rows where the 'type' is 'CACH' and the 'veg' column is True
-    cach_vegetation_veg_df = transects_df[(transects_df['type'] == 'CACH') & (transects_df['veg'] == True)]
-    
-    # Sum the 'cor_length' for those rows
-    cach_cover_sum_veg = cach_vegetation_veg_df.groupby("transect")["cor_length"].sum()
-    
-    # Calculate the percent cover of CACH over the veg portion of the transect
-    pct_cover_cach_veg = cach_cover_sum_veg / calculations_df.set_index("transect")["veg_length"]
-    
-    # Add this calculation to the 'calculations_df'
-    calculations_df["pct_cover_cach_veg"] = calculations_df["transect"].map(pct_cover_cach_veg)
-    
-    #atle veg 
-    
-    # Filter the transects_df for rows where the 'type' is 'ATLE' and the 'veg' column is True
-    atle_vegetation_veg_df = transects_df[(transects_df['type'] == 'ATLE') & (transects_df['veg'] == True)]
-    
-    # Sum the 'cor_length' for those rows
-    atle_cover_sum_veg = atle_vegetation_veg_df.groupby("transect")["cor_length"].sum()
-    
-    # Calculate the percent cover of ATLE over the veg portion of the transect
-    pct_cover_atle_veg = atle_cover_sum_veg / calculations_df.set_index("transect")["veg_length"]
-    
-    # Add this calculation to the 'calculations_df'
-    calculations_df["pct_cover_atle_veg"] = calculations_df["transect"].map(pct_cover_atle_veg)
+    calculations_df["tran_length"] = (positional_df["HTS"] - positional_df["eastend"]).abs()
+     # dune length
+    calculations_df["dune_length"] = positional_df["toe_sea"] - positional_df["toe_in"].abs()
+    # vegeted length
+    calculations_df["veg_length"] = (positional_df["lowest_veg"] - positional_df["eastend"]).abs()
+    
+    # -------all cover types------
+    
+    # EVERYTHING OVER ENTIRE TRANSECT
+    calculations_df = calculations_df.merge(
+        transects_df.groupby("transect")["cor_length"].sum().reset_index(),
+        on="transect", how="left"
+    )
+    calculations_df["pctcov_all_whole"] = calculations_df["cor_length"] / calculations_df["tran_length"]
+    calculations_df.drop(columns=["cor_length"], inplace=True)
+    
+    # EVERYTHING OVER DUNE PORTION OF TRANSECT
+    dune_df = transects_df[transects_df["dune"] == True] \
+        .groupby("transect", as_index=False)["cor_length"].sum()
+    
+    calculations_df = calculations_df.merge(dune_df, on="transect", how="left")
+    calculations_df["cor_length"] = calculations_df["cor_length"].fillna(0)  # Fill missing values with 0
+    calculations_df["pctcov_all_dune"] = calculations_df["cor_length"] / calculations_df["dune_length"]
+    calculations_df.drop(columns=["cor_length"], inplace=True)
+    
+    # EVERYTHING OVER VEGETATED PORTION OF TRANSECT
+    veg_df = transects_df[transects_df["veg"] == True] \
+        .groupby("transect", as_index=False)["cor_length"].sum()
+    
+    calculations_df = calculations_df.merge(veg_df, on="transect", how="left")
+    calculations_df["cor_length"] = calculations_df["cor_length"].fillna(0)  # Fill missing values with 0
+    calculations_df["pctcov_all_veg"] = calculations_df["cor_length"] / calculations_df["veg_length"]
+    calculations_df.drop(columns=["cor_length"], inplace=True)
+    
+    
+    #_______________TRANSECT WIDE_____
+    
+    # Convert codetype to string and replace NaN values with "Unknown"
+    transects_df["codetype"] = transects_df["codetype"].astype(str).fillna("Unknown")
+    # Get unique codetype values
+    unique_codetypes = transects_df["codetype"].unique()
+    
+    # Loop through each codetype and calculate percent cover
+    for codetype in unique_codetypes:
+        codetype_clean = f"pctcov_{codetype.replace(' ', '')}_transect"  # Remove spaces for column name
+        # filter transect_df to only include rows where codetype matches current iteration
+        temp_df = transects_df[transects_df["codetype"] == codetype] \
+            .groupby("transect", as_index=False)["cor_length"].sum() # sums the cor_length of each veg category for each transect
+    
+        # Merge with calculations_df
+        calculations_df = calculations_df.merge(temp_df, on="transect", how="left")
+        # Fill NaN values in 'cor_length' with 0 before calculating percent cover
+        calculations_df["cor_length"] = calculations_df["cor_length"].fillna(0)
+        # Calculate percent cover for the codetype
+        calculations_df[codetype_clean] = calculations_df["cor_length"] / calculations_df["tran_length"]
+        # Drop 'cor_length' column
+        calculations_df.drop(columns=["cor_length"], inplace=True)
+    
+    # native/nonnative plants
+    
+    # Define column name for native terrestrial plant percent cover
+    native_terrestrial_col = "pctcov_TerrestrialPlantNative_transect"
+    # Filter for only native terrestrial plants
+    native_terrestrial_df = transects_df[(transects_df["codetype"] == "Terrestrial Plant") & (transects_df["native"] == 1.0)] \
+        .groupby("transect", as_index=False)["cor_length"].sum()
+    # Merge with calculations_df
+    calculations_df = calculations_df.merge(native_terrestrial_df, on="transect", how="left")
+    # Fill NaN values in 'cor_length' with 0 before calculating percent cover
+    calculations_df["cor_length"] = calculations_df["cor_length"].fillna(0)
+    # Calculate percent cover for native terrestrial plants
+    calculations_df[native_terrestrial_col] = calculations_df["cor_length"] / calculations_df["tran_length"]
+    # Drop 'cor_length' column
+    calculations_df.drop(columns=["cor_length"], inplace=True)
+    
+    # Define column name for native terrestrial plant percent cover
+    nonnative_terrestrial_col = "pctcov_TerrestrialPlantNonnative_transect"
+    # Filter for only nonnative terrestrial plants
+    nonnative_terrestrial_df = transects_df[(transects_df["codetype"] == "Terrestrial Plant") & (transects_df["native"] == 0.0)] \
+        .groupby("transect", as_index=False)["cor_length"].sum()
+    # Merge with calculations_df
+    calculations_df = calculations_df.merge(nonnative_terrestrial_df, on="transect", how="left")
+    # Fill NaN values in 'cor_length' with 0 before calculating percent cover
+    calculations_df["cor_length"] = calculations_df["cor_length"].fillna(0)
+    # Calculate percent cover for native terrestrial plants
+    calculations_df[nonnative_terrestrial_col] = calculations_df["cor_length"] / calculations_df["tran_length"]
+    # Drop 'cor_length' column
+    calculations_df.drop(columns=["cor_length"], inplace=True)
+    
+    
+    
+    #--------DUNE----------
+    
+    # Loop to calculate percent cover for each codetype over the dune portion of the transect
+    for codetype in unique_codetypes:
+        codetype_clean_dune = f"pctcov_{codetype.replace(' ', '')}_dune"  # Clean column name for dune
+        # filter transect_df to only include rows where codetype matches current iteration
+        temp_df_dune = transects_df[(transects_df["codetype"] == codetype) & (transects_df["dune"] == True)] \
+            .groupby("transect", as_index=False)["cor_length"].sum() # sums the cor_length of each veg category for each transect
+    
+        # Merge with calculations_df
+        calculations_df = calculations_df.merge(temp_df_dune, on="transect", how="left")
+        # Fill NaN values in 'cor_length' with 0 before calculating percent cover
+        calculations_df["cor_length"] = calculations_df["cor_length"].fillna(0)
+        # Calculate percent cover for the dune portion
+        calculations_df[codetype_clean_dune] = calculations_df["cor_length"] / calculations_df["dune_length"]
+        # Drop 'cor_length' column
+        calculations_df.drop(columns=["cor_length"], inplace=True)
+    
+    # native/nonnative plants
+    
+    # Define column name for native terrestrial plant percent cover
+    native_terrestrial_dune_col = "pctcov_TerrestrialPlantNative_dune"
+    # Filter for only native terrestrial plants in the dune
+    native_terrestrial_dune_df = transects_df[(transects_df["codetype"] == "Terrestrial Plant") & (transects_df["native"] == 1.0) & (transects_df["dune"]== True)] \
+        .groupby("transect", as_index=False)["cor_length"].sum()
+    # Merge with calculations_df
+    calculations_df = calculations_df.merge(native_terrestrial_dune_df, on="transect", how="left")
+    # Fill NaN values in 'cor_length' with 0 before calculating percent cover
+    calculations_df["cor_length"] = calculations_df["cor_length"].fillna(0)
+    # Calculate percent cover for native terrestrial plants
+    calculations_df[native_terrestrial_dune_col] = calculations_df["cor_length"] / calculations_df["dune_length"]
+    # Drop 'cor_length' column
+    calculations_df.drop(columns=["cor_length"], inplace=True)
+    
+    # Define column name for native terrestrial plant percent cover
+    nonnative_terrestrial_dune_col = "pctcov_TerrestrialPlantNonnative_dune"
+    # Filter for only nonnative terrestrial plants
+    nonnative_terrestrial_dune_df = transects_df[(transects_df["codetype"] == "Terrestrial Plant") & (transects_df["native"] == 0.0) & (transects_df["dune"]== True)] \
+        .groupby("transect", as_index=False)["cor_length"].sum()
+    # Merge with calculations_df
+    calculations_df = calculations_df.merge(nonnative_terrestrial_dune_df, on="transect", how="left")
+    # Fill NaN values in 'cor_length' with 0 before calculating percent cover
+    calculations_df["cor_length"] = calculations_df["cor_length"].fillna(0)
+    # Calculate percent cover for native terrestrial plants
+    calculations_df[nonnative_terrestrial_dune_col] = calculations_df["cor_length"] / calculations_df["dune_length"]
+    # Drop 'cor_length' column
+    calculations_df.drop(columns=["cor_length"], inplace=True)
+    
+    #------------VEGETATED PORTION-----------------
+    
+    # Loop to calculate percent cover for each codetype over the dune portion of the transect
+    for codetype in unique_codetypes:
+        codetype_clean_veg = f"pctcov_{codetype.replace(' ', '')}_veg"  # Clean column name for dune
+        # filter transect_df to only include rows where codetype matches current iteration
+        temp_df_veg = transects_df[(transects_df["codetype"] == codetype) & (transects_df["veg"] == True)] \
+            .groupby("transect", as_index=False)["cor_length"].sum() # sums the cor_length of each veg category for each transect
+    
+        # Merge with calculations_df
+        calculations_df = calculations_df.merge(temp_df_veg, on="transect", how="left")
+        # Fill NaN values in 'cor_length' with 0 before calculating percent cover
+        calculations_df["cor_length"] = calculations_df["cor_length"].fillna(0)
+        # Calculate percent cover for the dune portion
+        calculations_df[codetype_clean_veg] = calculations_df["cor_length"] / calculations_df["veg_length"]
+        # Drop 'cor_length' column
+        calculations_df.drop(columns=["cor_length"], inplace=True)
+    
+    # native/nonnative plants
+    
+    # Define column name for native terrestrial plant percent cover
+    native_terrestrial_veg_col = "pctcov_TerrestrialPlantNative_veg"
+    # Filter for only native terrestrial plants in the dune
+    native_terrestrial_veg_df = transects_df[(transects_df["codetype"] == "Terrestrial Plant") & (transects_df["native"] == 1.0) & (transects_df["veg"]== True)] \
+        .groupby("transect", as_index=False)["cor_length"].sum()
+    # Merge with calculations_df
+    calculations_df = calculations_df.merge(native_terrestrial_veg_df, on="transect", how="left")
+    # Fill NaN values in 'cor_length' with 0 before calculating percent cover
+    calculations_df["cor_length"] = calculations_df["cor_length"].fillna(0)
+    # Calculate percent cover for native terrestrial plants
+    calculations_df[native_terrestrial_veg_col] = calculations_df["cor_length"] / calculations_df["veg_length"]
+    # Drop 'cor_length' column
+    calculations_df.drop(columns=["cor_length"], inplace=True)
+    
+    # Define column name for native terrestrial plant percent cover
+    nonnative_terrestrial_veg_col = "pctcov_TerrestrialPlantNonnative_veg"
+    # Filter for only nonnative terrestrial plants
+    nonnative_terrestrial_veg_df = transects_df[(transects_df["codetype"] == "Terrestrial Plant") & (transects_df["native"] == 0.0) & (transects_df["veg"]== True)] \
+        .groupby("transect", as_index=False)["cor_length"].sum()
+    # Merge with calculations_df
+    calculations_df = calculations_df.merge(nonnative_terrestrial_veg_df, on="transect", how="left")
+    # Fill NaN values in 'cor_length' with 0 before calculating percent cover
+    calculations_df["cor_length"] = calculations_df["cor_length"].fillna(0)
+    # Calculate percent cover for native terrestrial plants
+    calculations_df[nonnative_terrestrial_veg_col] = calculations_df["cor_length"] / calculations_df["veg_length"]
+    # Drop 'cor_length' column
+    calculations_df.drop(columns=["cor_length"], inplace=True)
+    
+    
+    #______SPECIES SPECIFIC_____________
+    
+    # Get unique species names
+    unique_species = transects_df["type"].dropna().unique()
+    
+    # Loop through each species
+    for species in unique_species:
+        species_clean = f"pctcov_{species.replace(' ', '')}_whole"  # Remove spaces for column name
+        
+        # Percent cover over entire transect
+        temp_df = transects_df[transects_df["type"] == species] \
+            .groupby("transect", as_index=False)["cor_length"].sum()
+        
+        calculations_df = calculations_df.merge(temp_df, on="transect", how="left")
+        calculations_df["cor_length"] = calculations_df["cor_length"].fillna(0)
+        calculations_df[species_clean] = calculations_df["cor_length"] / calculations_df["tran_length"]
+        calculations_df.drop(columns=["cor_length"], inplace=True)
+    
+        # Percent cover over dune portion
+        species_clean_dune = f"pctcov_{species.replace(' ', '')}_dune"
+        temp_df = transects_df[(transects_df["type"] == species) & (transects_df["dune"] == True)] \
+            .groupby("transect", as_index=False)["cor_length"].sum()
+        
+        calculations_df = calculations_df.merge(temp_df, on="transect", how="left")
+        calculations_df["cor_length"] = calculations_df["cor_length"].fillna(0)
+        calculations_df[species_clean_dune] = calculations_df["cor_length"] / calculations_df["dune_length"]
+        calculations_df.drop(columns=["cor_length"], inplace=True)
+    
+        # Percent cover over vegetated portion
+        species_clean_veg = f"pctcov_{species.replace(' ', '')}_veg"
+        temp_df = transects_df[(transects_df["type"] == species) & (transects_df["veg"] == True)] \
+            .groupby("transect", as_index=False)["cor_length"].sum()
+        
+        calculations_df = calculations_df.merge(temp_df, on="transect", how="left")
+        calculations_df["cor_length"] = calculations_df["cor_length"].fillna(0)
+        calculations_df[species_clean_veg] = calculations_df["cor_length"] / calculations_df["veg_length"]
+        calculations_df.drop(columns=["cor_length"], inplace=True)
+
 
     
     # Display DataFrame
     st.subheader("Processed Transect Data")
     st.dataframe(calculations_df)
 
-    # Visualization
-    st.subheader("Vegetation Cover Across Transects")
+    zone_option = st.radio(
+        "Select the transect portion to view percent cover for:",
+        ("whole", "dune", "veg"),
+        horizontal=True
+    )
 
-    fig, ax = plt.subplots()
-    ax.bar(calculations_df["transect"], calculations_df["pct_cover_veg_whole"], color="green", label="Total Vegetation")
-    ax.bar(calculations_df["transect"], calculations_df["pct_cover_native_veg_whole"], color="blue", label="Native Vegetation")
-    ax.bar(calculations_df["transect"], calculations_df["pct_cover_non_native_veg_whole"], color="red", label="Non-Native Vegetation")
-    ax.set_xlabel("Transect")
+    pastel_palette = ["#cdb4db",  # light purple
+                      "#b5ead7",  # light green
+                      "#a0c4ff",  # ocean blue
+                      "#ffe066",  # golden yellow
+                      "#fbc4ab",  # optional coral-pink for variety
+                      "#fdffb6",  # pale yellow
+                      "#9bf6ff",  # light cyan
+                      "#d0f4de"]  # mint
+
+
+    # Filter columns based on zone
+    zone_suffix = f"_{zone_option}"
+    pctcov_cols = [col for col in calculations_df.columns if col.startswith("pctcov_") and col.endswith(zone_suffix)]
+    
+    # Build a dataframe of average percent cover
+    avg_df = calculations_df[pctcov_cols].mean().reset_index()
+    avg_df.columns = ["Species", "Percent Cover"]
+    
+    # Clean up species names
+    avg_df["Species"] = avg_df["Species"].str.replace("pctcov_", "").str.replace(zone_suffix, "")
+    avg_df["Species"] = avg_df["Species"].str.replace(r"([a-z])([A-Z])", r"\1 \2", regex=True)
+    
+    # Plot
+    fig, ax = plt.subplots(figsize=(8, 5))
+    avg_df.plot(kind="bar", x="Species", y="Percent Cover", ax=ax, legend=False, color=pastel_palette[:len(avg_df)])
+    ax.set_title(f"Average Percent Cover by Species ({zone_option.capitalize()} Transects)")
     ax.set_ylabel("Percent Cover")
-    ax.legend()
+    ax.set_xlabel("Species")
+    plt.xticks(rotation=45, ha='right')
+    plt.tight_layout()
+    
     st.pyplot(fig)
+
+    # Create a stacked bar dataframe
+    stack_df = calculations_df[["transect"] + pctcov_cols].copy()
+    stack_df.columns = ["transect"] + [col.replace("pctcov_", "").replace(zone_suffix, "") for col in pctcov_cols]
+    
+    # Set transect as index for plotting
+    stack_df.set_index("transect", inplace=True)
+    fig2, ax2 = plt.subplots(figsize=(10, 6))
+    stack_df.plot(kind="bar", stacked=True, ax=ax2, colormap=pastel_palette[:stack_df.shape[1]])
+    ax2.set_title(f"Species Composition by Transect ({zone_option.capitalize()} Transects)")
+    ax2.set_ylabel("Percent Cover")
+    ax2.set_xlabel("Transect")
+    plt.xticks(rotation=45, ha='right')
+    plt.tight_layout()
+    
+    st.pyplot(fig2)
+
+
 
     # Allow user to download processed data
     st.subheader("Download Processed Data")
