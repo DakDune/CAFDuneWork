@@ -354,7 +354,7 @@ if uploaded_file:
     
     # Step 3: Filter the dataframe
     filtered_df = calculations_df[
-        (calculations_df["site"] == selected_site) &
+        (calculations_df["sitename"] == selected_site) &
         (calculations_df["date"] == selected_date)
     ]
     
