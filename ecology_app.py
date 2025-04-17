@@ -344,46 +344,50 @@ if uploaded_file:
         horizontal=True
     )
 
-        # Define pastel colormap function
+    # Step 1: Let user choose a site
+    sites = calculations_df["sitename"].unique()
+    selected_site = st.selectbox("Select a Site", sorted(sites))
+    
+    # Step 2: Let user choose a date from that site
+    dates = calculations_df[calculations_df["sitename"] == selected_site]["date"].unique()
+    selected_date = st.selectbox("Select a Survey Date", sorted(dates))
+    
+    # Step 3: Filter the dataframe
+    filtered_df = calculations_df[
+        (calculations_df["site"] == selected_site) &
+        (calculations_df["date"] == selected_date)
+    ]
+    
+    # Step 4: Define pastel colormap function
     def get_pastel_colors(n):
         base_cmap = cm.get_cmap('Pastel1' if n <= 9 else 'Pastel2')  # Pastel1: 9 colors, Pastel2: 8
         if n > base_cmap.N:
-            # If we need more than what base cmap provides, interpolate
             return [base_cmap(i / n) for i in range(n)]
         else:
             return [base_cmap(i) for i in range(n)]
-    # Prepare the dataframe for plotting
-    # Filter for columns containing percent cover for the selected zone (e.g., whole, dune, veg)
-    zone_suffix = f"_{zone_option}"  # zone_option is one of 'whole', 'dune', or 'veg'
-    stack_df = calculations_df[["transect"] + [col for col in calculations_df.columns if col.endswith(zone_suffix)]].copy()
     
-    # Rename columns for plotting (strip the 'pctcov_' prefix and zone suffix)
+    # Step 5: Prepare the dataframe for plotting
+    zone_suffix = f"_{zone_option}"
+    stack_df = filtered_df[["transect"] + [col for col in filtered_df.columns if col.endswith(zone_suffix)]].copy()
     stack_df.columns = ["transect"] + [col.replace("pctcov_", "").replace(zone_suffix, "") for col in stack_df.columns[1:]]
     
     # Remove species columns with all zero percent cover
     nonzero_cols = [col for col in stack_df.columns[1:] if stack_df[col].sum() > 0]
     stack_df = stack_df[["transect"] + nonzero_cols]
     
-    # Set index for plotting
-    stack_df.set_index("transect", inplace=True)
-    
-    # Create the plot
-    fig, ax = plt.subplots(figsize=(10, 6))
-    
-    # Get pastel colors dynamically
-    colors = get_pastel_colors(len(stack_df.columns))
-    
-    # Plot the horizontal stacked bar chart
-    stack_df.plot(kind="barh", stacked=True, ax=ax, color=colors)
-    
-    # Titles and labels
-    ax.set_title(f"Species Composition by Transect ({zone_option.capitalize()} Transects)")
-    ax.set_xlabel("Percent Cover")
-    ax.set_ylabel("Transect")
-    
-    # Tight layout for clean display
-    plt.tight_layout()
-    st.pyplot(fig)
+    # Plot if there's data to show
+    if len(stack_df.columns) > 1:
+        stack_df.set_index("transect", inplace=True)
+        fig, ax = plt.subplots(figsize=(10, 6))
+        colors = get_pastel_colors(len(stack_df.columns))
+        stack_df.plot(kind="barh", stacked=True, ax=ax, color=colors)
+        ax.set_title(f"Species Composition – {selected_site}, {selected_date} ({zone_option.capitalize()})")
+        ax.set_xlabel("Percent Cover")
+        ax.set_ylabel("Transect")
+        plt.tight_layout()
+        st.pyplot(fig)
+    else:
+        st.info("No species with non-zero coverage for this selection.")
 
 
 
